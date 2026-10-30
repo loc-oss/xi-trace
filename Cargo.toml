@@ -2,9 +2,12 @@
 name = "xi-trace"
 version = "0.2.0"
 license = "Apache-2.0"
-authors = ["Vitali Lovich <vlovich@google.com>"]
+authors = [
+    "Vitali Lovich <vlovich@google.com>",
+    "LOC-OSS Community"
+]
 categories = ["development-tools::profiling"]
-repository = "https://github.com/loc-oss/xi-editor"
+repository = "https://github.com/loc-oss/xi-trace"
 description = "Library-based distributed tracing API to meet the needs of xi-core, frontends and plugins"
 edition = '2018'
 
