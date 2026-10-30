@@ -1,0 +1,10 @@
+LOC-OSS Projects
+Copyright 2026 LOC-OSS Community and contributors.
+
+This product includes software developed at LOC-OSS.
+
+This product is a fork of the xi-editor project (https://github.com/xi-editor/xi-editor),
+specifically the xi-rpc crate.
+The original xi-rpc code is Copyright 2016-2017 The xi-editor Authors.
+A full list of the original authors and copyright holders can be found in the
+AUTHORS file included in this repository.
