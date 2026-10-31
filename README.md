@@ -99,8 +99,8 @@ cargo clippy --all-features --all-targets -- -D warnings
 
 Or simply run the provided script:
 ```bash
-chmod +x test.sh
-./test.sh
+chmod +x run_all_test
+./run_all_test
 ```
 
 ## License
