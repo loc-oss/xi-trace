@@ -19,9 +19,6 @@
     clippy::ptr_arg
 )]
 
-#[cfg(all(test, feature = "benchmarks"))]
-extern crate test;
-
 use std::io::{Error as IOError, ErrorKind as IOErrorKind, Read, Write};
 
 use super::Sample;
@@ -57,32 +54,6 @@ impl Error {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
-#[serde(untagged)]
-enum ChromeTraceArrayEntries {
-    Array(Vec<Sample>),
-}
-
-/// This serializes the samples into the [Chrome trace event format](https://www.google.com/url?sa=t&rct=j&q=&esrc=s&source=web&cd=1&ved=0ahUKEwiJlZmDguXYAhUD4GMKHVmEDqIQFggpMAA&url=https%3A%2F%2Fdocs.google.com%2Fdocument%2Fd%2F1CvAClvFfyA5R-PhYUmn5OOQtYMH4h6I0nSsKchNAySU%2Fpreview&usg=AOvVaw0tBFlVbDVBikdzLqgrWK3g).
-///
-/// # Arguments
-/// `samples` - Something that can be converted into an iterator of sample
-/// references.
-/// `format` - Which trace format to save the data in.  There are four total
-/// formats described in the document.
-/// `output` - Where to write the serialized result.
-///
-/// # Returns
-/// A `Result<(), Error>` that indicates if serialization was successful or the
-/// details of any error that occured.
-///
-/// # Examples
-/// ```no_run
-/// # use xi_trace::chrome_trace_dump::serialize;
-/// let samples = xi_trace::samples_cloned_sorted();
-/// let mut serialized = Vec::<u8>::new();
-/// serialize(&samples, &mut serialized);
-/// ```
 pub fn serialize<W>(samples: &Vec<Sample>, output: W) -> Result<(), Error>
 where
     W: Write,
@@ -110,8 +81,8 @@ mod tests {
     use super::*;
     #[cfg(feature = "json_payload")]
     use crate::TracePayloadT;
-    #[cfg(feature = "benchmarks")]
-    use test::Bencher;
+    #[cfg(any(feature = "json_payload", feature = "chrome_trace_event"))]
+    use serde_json::json;
 
     #[cfg(not(feature = "json_payload"))]
     fn to_payload(value: &'static str) -> &'static str {
@@ -159,7 +130,10 @@ mod tests {
             assert_eq!(decoded_result[i]["ts"], samples[i].timestamp_us);
             let nth_sample = &samples[i];
             let nth_args = nth_sample.args.as_ref().unwrap();
-            assert_eq!(decoded_result[i]["args"]["xi_payload"], json!(nth_args.payload.as_ref()));
+            assert_eq!(
+                decoded_result[i]["args"]["xi_payload"],
+                json!(nth_args.payload.as_ref())
+            );
         }
         assert_eq!(decoded_result[5]["ph"], "B");
         assert_eq!(decoded_result[6]["ph"], "E");
@@ -175,7 +149,12 @@ mod tests {
         trace.instant("sample1", &["test", "chrome"]);
         trace.instant_payload("sample2", &["test", "chrome"], to_payload("payload 2"));
         trace.instant_payload("sample3", &["test", "chrome"], to_payload("payload 3"));
-        trace.closure_payload("sample4", &["test", "chrome"], || (), to_payload("payload 4"));
+        trace.closure_payload(
+            "sample4",
+            &["test", "chrome"],
+            || (),
+            to_payload("payload 4"),
+        );
 
         let samples = trace.samples_cloned_unsorted();
 
@@ -185,38 +164,5 @@ mod tests {
 
         let deserialized_samples = deserialize(serialized.as_slice()).unwrap();
         assert_eq!(deserialized_samples, samples);
-    }
-
-    #[cfg(all(feature = "chrome_trace_event", feature = "benchmarks"))]
-    #[bench]
-    fn bench_chrome_trace_serialization_one_element(b: &mut Bencher) {
-        use super::*;
-
-        let mut serialized = Vec::<u8>::new();
-        let samples = vec![super::Sample::new_instant("trace1", &["benchmark", "test"], None)];
-        b.iter(|| {
-            serialized.clear();
-            serialize(&samples, &mut serialized).unwrap();
-        });
-    }
-
-    #[cfg(all(feature = "chrome_trace_event", feature = "benchmarks"))]
-    #[bench]
-    fn bench_chrome_trace_serialization_multiple_elements(b: &mut Bencher) {
-        use super::super::*;
-        use super::*;
-
-        let mut serialized = Vec::<u8>::new();
-        let samples = vec![
-            Sample::new_instant("trace1", &["benchmark", "test"], None),
-            Sample::new_instant("trace2", &["benchmark"], None),
-            Sample::new_duration("trace3", &["benchmark"], Some(to_payload("some payload")), 0, 0),
-            Sample::new_instant("trace4", &["benchmark"], None),
-        ];
-
-        b.iter(|| {
-            serialized.clear();
-            serialize(&samples, &mut serialized).unwrap();
-        });
     }
 }

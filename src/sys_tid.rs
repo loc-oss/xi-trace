@@ -16,7 +16,7 @@
 #[inline]
 pub fn current_tid() -> Result<u64, libc::c_int> {
     #[link(name = "pthread")]
-    extern "C" {
+    unsafe extern "C" {
         fn pthread_threadid_np(thread: libc::pthread_t, thread_id: *mut u64) -> libc::c_int;
     }
 
@@ -28,22 +28,6 @@ pub fn current_tid() -> Result<u64, libc::c_int> {
             _ => Err(err),
         }
     }
-}
-
-#[cfg(target_os = "fuchsia")]
-#[inline]
-pub fn current_tid() -> Result<u64, libc::c_int> {
-    // TODO: fill in for fuchsia.  This is the native C API but maybe there are
-    // rust-specific bindings already.
-    /*
-    extern {
-        fn thrd_get_zx_handle(thread: thrd_t) -> zx_handle_t;
-        fn thrd_current() -> thrd_t;
-    }
-
-    Ok(thrd_get_zx_handle(thrd_current()) as u64)
-    */
-    Ok(0)
 }
 
 #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -61,7 +45,6 @@ pub fn current_tid() -> Result<u64, libc::c_int> {
         target_os = "ios",
         target_os = "linux",
         target_os = "android",
-        target_os = "fuchsia"
     ))
 ))]
 pub fn current_tid() -> Result<u64, libc::c_int> {
@@ -71,7 +54,7 @@ pub fn current_tid() -> Result<u64, libc::c_int> {
 #[cfg(target_os = "windows")]
 #[inline]
 pub fn current_tid() -> Result<u64, libc::c_int> {
-    extern "C" {
+    unsafe extern "C" {
         fn GetCurrentThreadId() -> libc::c_ulong;
     }
 

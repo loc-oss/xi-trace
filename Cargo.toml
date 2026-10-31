@@ -9,10 +9,9 @@ authors = [
 categories = ["development-tools::profiling"]
 repository = "https://github.com/loc-oss/xi-trace"
 description = "Library-based distributed tracing API to meet the needs of xi-core, frontends and plugins"
-edition = '2018'
+edition = '2024'
 
 [features]
-benchmarks = []
 default = ["chrome_trace_event"]
 json_payload = ["serde_json"]
 getpid = []
@@ -28,3 +27,6 @@ serde = "1.0"
 libc = "0.2"
 log = "0.4.3"
 bincode = { version = "1.0", optional = true }
+
+[dev-dependencies]
+serde_json = "1.0"

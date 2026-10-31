@@ -17,20 +17,6 @@ use std::collections::vec_deque::{Drain, IntoIter, Iter, IterMut, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::ops::{Index, IndexMut, RangeBounds};
 
-/// Provides fixed size ring buffer that overwrites elements in FIFO order on
-/// insertion when full.  API provided is similar to VecDeque & uses a VecDeque
-/// internally. One distinction is that only append-like insertion is allowed.
-/// This means that insert & push_front are not allowed.  The reasoning is that
-/// there is ambiguity on how such functions should operate since it would be
-/// pretty impossible to maintain a FIFO ordering.
-///
-/// All operations that would cause growth beyond the limit drop the appropriate
-/// number of elements from the front.  For example, on a full buffer push_front
-/// replaces the first element.
-///
-/// The removal of elements on operation that would cause excess beyond the
-/// limit happens first to make sure the space is available in the underlying
-/// VecDeque, thus guaranteeing O(1) operations always.
 #[derive(Clone, Debug)]
 pub struct FixedLifoDeque<T> {
     storage: VecDeque<T>,
@@ -38,17 +24,11 @@ pub struct FixedLifoDeque<T> {
 }
 
 impl<T> FixedLifoDeque<T> {
-    /// Constructs a ring buffer that will reject all insertions as no-ops.
-    /// This also construct the underlying VecDeque with_capacity(0) which
-    /// in the current stdlib implementation allocates 2 Ts.
     #[inline]
     pub fn new() -> Self {
         FixedLifoDeque::with_limit(0)
     }
 
-    /// Constructs a fixed size ring buffer with the given number of elements.
-    /// Attempts to insert more than this number of elements will cause excess
-    /// elements to first be evicted in FIFO order (i.e. from the front).
     pub fn with_limit(n: usize) -> Self {
         FixedLifoDeque {
             storage: VecDeque::with_capacity(n),
@@ -56,10 +36,6 @@ impl<T> FixedLifoDeque<T> {
         }
     }
 
-    /// This sets a new limit on the container.  Excess elements are dropped in
-    /// FIFO order.  The new capacity is reset to the requested limit which will
-    /// likely result in re-allocation + copies/clones even if the limit
-    /// shrinks.
     pub fn reset_limit(&mut self, n: usize) {
         if n < self.limit {
             let overflow = self.limit - n;
@@ -71,7 +47,6 @@ impl<T> FixedLifoDeque<T> {
         debug_assert!(self.storage.len() <= self.limit);
     }
 
-    /// Returns the current limit this ring buffer is configured with.
     #[inline]
     pub fn limit(&self) -> usize {
         self.limit
@@ -98,19 +73,15 @@ impl<T> FixedLifoDeque<T> {
     }
 
     #[inline]
-    pub fn iter(&self) -> Iter<T> {
+    pub fn iter(&self) -> Iter<'_, T> {
         self.storage.iter()
     }
 
     #[inline]
-    pub fn iter_mut(&mut self) -> IterMut<T> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         self.storage.iter_mut()
     }
 
-    /// Returns a tuple of 2 slices that represents the ring buffer. [0] is the
-    /// beginning of the buffer to the physical end of the array or the last
-    /// element (whichever comes first).  [1] is the continuation of [0] if the
-    /// ring buffer has wrapped the contiguous storage.
     #[inline]
     pub fn as_slices(&self) -> (&[T], &[T]) {
         self.storage.as_slices()
@@ -132,7 +103,7 @@ impl<T> FixedLifoDeque<T> {
     }
 
     #[inline]
-    pub fn drain<R>(&mut self, range: R) -> Drain<T>
+    pub fn drain<R>(&mut self, range: R) -> Drain<'_, T>
     where
         R: RangeBounds<usize>,
     {
@@ -183,24 +154,17 @@ impl<T> FixedLifoDeque<T> {
         }
     }
 
-    /// Always an O(1) operation.  Memory is never reclaimed.
     #[inline]
     pub fn pop_front(&mut self) -> Option<T> {
         self.storage.pop_front()
     }
 
-    /// Always an O(1) operation.  If the number of elements is at the limit,
-    /// the element at the front is overwritten.
-    ///
-    /// Post condition: The number of elements is <= limit
     pub fn push_back(&mut self, value: T) {
         self.drop_excess_for_inserting(1);
         self.storage.push_back(value);
-        // For when limit == 0
         self.drop_excess_for_inserting(0);
     }
 
-    /// Always an O(1) operation.  Memory is never reclaimed.
     #[inline]
     pub fn pop_back(&mut self) -> Option<T> {
         self.storage.pop_back()
@@ -216,7 +180,6 @@ impl<T> FixedLifoDeque<T> {
         self.storage.swap_remove_front(index)
     }
 
-    /// Always an O(1) operation.
     #[inline]
     pub fn remove(&mut self, index: usize) -> Option<T> {
         self.storage.remove(index)
@@ -229,11 +192,9 @@ impl<T> FixedLifoDeque<T> {
         }
     }
 
-    /// Always an O(m) operation where m is the length of `other'.
     pub fn append(&mut self, other: &mut VecDeque<T>) {
         self.drop_excess_for_inserting(other.len());
         self.storage.append(other);
-        // For when limit == 0
         self.drop_excess_for_inserting(0);
     }
 
@@ -247,9 +208,6 @@ impl<T> FixedLifoDeque<T> {
 }
 
 impl<T: Clone> FixedLifoDeque<T> {
-    /// Resizes a fixed queue.  This doesn't change the limit so the resize is
-    /// capped to the limit.  Additionally, resizing drops the elements from the
-    /// front unlike with a regular VecDeque.
     pub fn resize(&mut self, new_len: usize, value: T) {
         if new_len < self.len() {
             let to_drop = self.len() - new_len;
@@ -310,8 +268,6 @@ impl<T> IntoIterator for FixedLifoDeque<T> {
     type Item = T;
     type IntoIter = IntoIter<T>;
 
-    /// Consumes the list into a front-to-back iterator yielding elements by
-    /// value.
     #[inline]
     fn into_iter(self) -> IntoIter<T> {
         self.storage.into_iter()
@@ -355,8 +311,6 @@ impl<'a, T: 'a + Copy> Extend<&'a T> for FixedLifoDeque<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "benchmarks")]
-    use test::Bencher;
 
     #[test]
     fn test_basic_insertions() {
@@ -386,29 +340,6 @@ mod tests {
         assert_eq!(tester[2], 4);
     }
 
-    #[cfg(feature = "benchmarks")]
-    #[bench]
-    fn bench_push_back(b: &mut Bencher) {
-        let mut q = FixedLifoDeque::with_limit(10);
-        b.iter(|| q.push_back(5));
-    }
-
-    #[cfg(feature = "benchmarks")]
-    #[bench]
-    fn bench_deletion_from_empty(b: &mut Bencher) {
-        let mut q = FixedLifoDeque::<u32>::with_limit(10000);
-        b.iter(|| q.pop_front());
-    }
-
-    #[cfg(feature = "benchmarks")]
-    #[bench]
-    fn bench_deletion_from_non_empty(b: &mut Bencher) {
-        let mut q = FixedLifoDeque::with_limit(1000000);
-        for i in 0..q.limit() {
-            q.push_back(i);
-        }
-        b.iter(|| q.pop_front());
-    }
     #[test]
     fn test_new_is_zero_limit() {
         let d: FixedLifoDeque<i32> = FixedLifoDeque::new();
@@ -622,14 +553,12 @@ mod tests {
 
     #[test]
     fn test_into_iter_and_extend() {
-        // Extend<A> — by value (Vec<i32> yields i32).
         let mut d = FixedLifoDeque::with_limit(3);
         d.extend(vec![1, 2, 3, 4]);
         assert_eq!(d.iter().copied().collect::<Vec<_>>(), vec![2, 3, 4]);
         let owned: Vec<_> = d.clone().into_iter().collect();
         assert_eq!(owned, vec![2, 3, 4]);
 
-        // Extend<&'a T> — by reference (Iter yields &i32).
         let mut e: FixedLifoDeque<i32> = FixedLifoDeque::with_limit(3);
         e.extend([10, 20, 30].iter());
         assert_eq!(e.iter().copied().collect::<Vec<_>>(), vec![10, 20, 30]);

@@ -22,8 +22,9 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+#[cfg(feature = "chrome_trace_event")]
 use xi_trace::chrome_trace_dump;
-use xi_trace::{CategoriesT, Config, Sample, SampleEventType, SampleGuard, StrCow, Trace};
+use xi_trace::{CategoriesT, Config, Sample, SampleEventType, SampleGuard, Trace, TracePayloadT};
 
 static GLOBAL_LOCK: Mutex<()> = Mutex::new(());
 
@@ -36,7 +37,10 @@ fn hash<T: Hash>(t: &T) -> u64 {
 #[test]
 fn config_with_limit_bytes() {
     let cfg = Config::with_limit_bytes(1024 * 1024);
-    assert_eq!(cfg.max_samples(), 1024 * 1024 / std::mem::size_of::<Sample>());
+    assert_eq!(
+        cfg.max_samples(),
+        1024 * 1024 / std::mem::size_of::<Sample>()
+    );
 }
 
 #[test]
@@ -229,7 +233,7 @@ fn sample_ord_by_timestamp() {
     b.timestamp_us = 5;
     assert!(a > b);
 
-    let mut v = vec![a, b];
+    let mut v = [a, b];
     v.sort();
     assert_eq!(v[0].timestamp_us, 5);
     assert_eq!(v[1].timestamp_us, 10);
@@ -326,12 +330,12 @@ fn trace_closure_returns_closure_value() {
 }
 
 #[cfg(not(feature = "json_payload"))]
-fn payload_arg() -> impl Into<StrCow> {
-    "payload"
+fn payload_arg() -> TracePayloadT {
+    "payload".into()
 }
 
 #[cfg(feature = "json_payload")]
-fn payload_arg() -> serde_json::Value {
+fn payload_arg() -> TracePayloadT {
     serde_json::json!({ "k": "v" })
 }
 
@@ -415,7 +419,7 @@ fn trace_thread_safe() {
     assert!(t.get_samples_count() > 0);
     let _ = t.samples_cloned_unsorted();
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_serialize_empty() {
     let samples: Vec<Sample> = Vec::new();
@@ -423,7 +427,7 @@ fn chrome_trace_serialize_empty() {
     chrome_trace_dump::serialize(&samples, &mut buf).unwrap();
     assert_eq!(buf, b"[]");
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_to_value_decode_roundtrip() {
     let mut s = Sample::new_instant("x", &["cat"], None);
@@ -436,7 +440,7 @@ fn chrome_trace_to_value_decode_roundtrip() {
     let back = chrome_trace_dump::decode(v).unwrap();
     assert_eq!(samples, back);
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_error_already_exists() {
     let err = chrome_trace_dump::Error::already_exists();
@@ -447,21 +451,21 @@ fn chrome_trace_error_already_exists() {
         other => panic!("expected Io(AlreadyExists), got {:?}", other),
     }
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_error_from_io() {
-    let io_err = std::io::Error::new(std::io::ErrorKind::Other, "boom");
+    let io_err = std::io::Error::other("boom");
     let e: chrome_trace_dump::Error = io_err.into();
     assert!(matches!(e, chrome_trace_dump::Error::Io(_)));
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_error_from_json() {
     let json_err = serde_json::from_str::<i32>("not-json").unwrap_err();
     let e: chrome_trace_dump::Error = json_err.into();
     assert!(matches!(e, chrome_trace_dump::Error::Json(_)));
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_error_from_string() {
     let e: chrome_trace_dump::Error = "custom".to_string().into();
@@ -514,7 +518,6 @@ fn global_api_smoke() {
     xi_trace::disable_tracing();
     assert_eq!(xi_trace::samples_len(), 0);
 }
-
 
 #[cfg(feature = "json_payload")]
 #[test]
@@ -623,8 +626,12 @@ fn sample_new_instant_empty_categories() {
 fn sample_eq_differs_on_pid() {
     let mut a = Sample::new_instant("x", &[], None);
     let mut b = Sample::new_instant("x", &[], None);
-    a.pid = 1; a.tid = 1; a.timestamp_us = 100;
-    b.pid = 2; b.tid = 1; b.timestamp_us = 100;
+    a.pid = 1;
+    a.tid = 1;
+    a.timestamp_us = 100;
+    b.pid = 2;
+    b.tid = 1;
+    b.timestamp_us = 100;
     assert_ne!(a, b);
 }
 
@@ -632,8 +639,12 @@ fn sample_eq_differs_on_pid() {
 fn sample_eq_differs_on_tid() {
     let mut a = Sample::new_instant("x", &[], None);
     let mut b = Sample::new_instant("x", &[], None);
-    a.pid = 1; a.tid = 1; a.timestamp_us = 100;
-    b.pid = 1; b.tid = 2; b.timestamp_us = 100;
+    a.pid = 1;
+    a.tid = 1;
+    a.timestamp_us = 100;
+    b.pid = 1;
+    b.tid = 2;
+    b.timestamp_us = 100;
     assert_ne!(a, b);
 }
 
@@ -641,8 +652,12 @@ fn sample_eq_differs_on_tid() {
 fn sample_eq_differs_on_event_type() {
     let mut a = Sample::new_instant("x", &[], None);
     let mut b = Sample::new_instant("x", &[], None);
-    a.pid = 1; a.tid = 1; a.timestamp_us = 100;
-    b.pid = 1; b.tid = 1; b.timestamp_us = 100;
+    a.pid = 1;
+    a.tid = 1;
+    a.timestamp_us = 100;
+    b.pid = 1;
+    b.tid = 1;
+    b.timestamp_us = 100;
     b.event_type = SampleEventType::DurationBegin;
     assert_ne!(a, b);
 }
@@ -651,8 +666,12 @@ fn sample_eq_differs_on_event_type() {
 fn sample_eq_ignores_thread_name() {
     let mut a = Sample::new_instant("x", &[], None);
     let mut b = Sample::new_instant("x", &[], None);
-    a.pid = 1; a.tid = 1; a.timestamp_us = 100;
-    b.pid = 1; b.tid = 1; b.timestamp_us = 100;
+    a.pid = 1;
+    a.tid = 1;
+    a.timestamp_us = 100;
+    b.pid = 1;
+    b.tid = 1;
+    b.timestamp_us = 100;
     a.thread_name = Some("foo".into());
     b.thread_name = Some("bar".into());
     assert_eq!(a, b);
@@ -661,9 +680,13 @@ fn sample_eq_ignores_thread_name() {
 #[test]
 fn sample_eq_differs_on_payload() {
     let mut a = Sample::new_instant("x", &[], None);
-    let mut b = Sample::new_instant("x", &[], Some(payload_arg().into()));
-    a.pid = 1; a.tid = 1; a.timestamp_us = 100;
-    b.pid = 1; b.tid = 1; b.timestamp_us = 100;
+    let mut b = Sample::new_instant("x", &[], Some(payload_arg()));
+    a.pid = 1;
+    a.tid = 1;
+    a.timestamp_us = 100;
+    b.pid = 1;
+    b.tid = 1;
+    b.timestamp_us = 100;
     assert_ne!(a, b);
 }
 
@@ -726,7 +749,9 @@ fn trace_named_thread_adds_thread_name_metadata() {
     let tc = t.clone();
     let h = thread::Builder::new()
         .name("compat-thread".to_string())
-        .spawn(move || { tc.instant("inside", &[]); })
+        .spawn(move || {
+            tc.instant("inside", &[]);
+        })
         .unwrap();
     h.join().unwrap();
 
@@ -761,18 +786,20 @@ fn trace_save_unsorted_works() {
     assert!(path.exists());
     std::fs::remove_file(&path).unwrap();
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_deserialize_from_reader() {
     let mut s = Sample::new_instant("x", &["c"], None);
-    s.pid = 1; s.tid = 2; s.timestamp_us = 42;
+    s.pid = 1;
+    s.tid = 2;
+    s.timestamp_us = 42;
     let samples = vec![s];
 
     let json = serde_json::to_string(&samples).unwrap();
     let back = chrome_trace_dump::deserialize(json.as_bytes()).unwrap();
     assert_eq!(samples, back);
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_to_value_decode_empty() {
     let samples: Vec<Sample> = Vec::new();
@@ -781,11 +808,13 @@ fn chrome_trace_to_value_decode_empty() {
     let back = chrome_trace_dump::decode(v).unwrap();
     assert!(back.is_empty());
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_serialize_non_empty() {
     let mut s = Sample::new_instant("x", &["c"], None);
-    s.pid = 1; s.tid = 2; s.timestamp_us = 42;
+    s.pid = 1;
+    s.tid = 2;
+    s.timestamp_us = 42;
     let samples = vec![s];
 
     let mut buf = Vec::new();
@@ -796,7 +825,7 @@ fn chrome_trace_serialize_non_empty() {
     assert_eq!(arr[0]["name"], "x");
     assert_eq!(arr[0]["ph"], "i");
 }
-
+#[cfg(feature = "chrome_trace_event")]
 #[test]
 fn chrome_trace_deserialize_invalid_json_is_error() {
     let r = chrome_trace_dump::deserialize(&b"not json"[..]);
@@ -829,7 +858,9 @@ fn global_trace_block_and_closure_work() {
     xi_trace::disable_tracing();
     xi_trace::enable_tracing_with_config(Config::with_limit_count(10));
 
-    { let _b = xi_trace::trace_block("b", &[]); }
+    {
+        let _b = xi_trace::trace_block("b", &[]);
+    }
     let r = xi_trace::trace_closure("c", &[], || 7);
     assert_eq!(r, 7);
 
