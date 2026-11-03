@@ -18,12 +18,12 @@
     deprecated
 )]
 
-use lazy_static::lazy_static;
 use log::warn;
 use std::collections::HashMap;
 use std::string::ToString;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+use std::sync::{LazyLock, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(feature = "chrome_trace_event")]
 use std::fs;
@@ -42,10 +42,17 @@ pub mod chrome_trace_dump;
 
 use crate::fixed_lifo_deque::FixedLifoDeque;
 
-// Реэкспорт публичного API
 pub use crate::categories::CategoriesT;
 pub use crate::config::Config;
 pub use crate::sample::{Sample, SampleArgs, SampleEventType, SampleGuard, StrCow, TracePayloadT};
+
+#[inline]
+pub(crate) fn precise_time_ns() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0)
+}
 
 fn exe_name() -> Option<String> {
     match std::env::current_exe() {
@@ -177,9 +184,9 @@ impl Trace {
         C: Into<CategoriesT>,
         F: FnOnce() -> R,
     {
-        let start = time::precise_time_ns();
+        let start = precise_time_ns();
         let result = closure();
-        let end = time::precise_time_ns();
+        let end = precise_time_ns();
         if self.is_enabled() {
             self.record(Sample::new_duration(
                 name,
@@ -205,9 +212,9 @@ impl Trace {
         P: Into<TracePayloadT>,
         F: FnOnce() -> R,
     {
-        let start = time::precise_time_ns();
+        let start = precise_time_ns();
         let result = closure();
-        let end = time::precise_time_ns();
+        let end = precise_time_ns();
         if self.is_enabled() {
             self.record(Sample::new_duration(
                 name,
@@ -291,9 +298,7 @@ impl Trace {
     }
 }
 
-lazy_static! {
-    static ref TRACE: Trace = Trace::disabled();
-}
+static TRACE: LazyLock<Trace> = LazyLock::new(Trace::disabled);
 
 #[inline]
 pub fn enable_tracing() {

@@ -6,6 +6,7 @@ use serde_derive::{Deserialize, Serialize};
 
 use crate::Trace;
 use crate::categories::CategoriesT;
+use crate::precise_time_ns;
 use crate::{sys_pid, sys_tid};
 
 pub type StrCow = Cow<'static, str>;
@@ -204,7 +205,7 @@ impl Sample {
         Self {
             name: name.into(),
             categories: Some(categories.into()),
-            timestamp_us: ns_to_us(time::precise_time_ns()),
+            timestamp_us: ns_to_us(precise_time_ns()),
             event_type,
             duration_us: None,
             tid: sys_tid::current_tid().unwrap(),
@@ -254,7 +255,7 @@ impl Sample {
         Self {
             name: name.into(),
             categories: Some(categories.into()),
-            timestamp_us: ns_to_us(time::precise_time_ns()),
+            timestamp_us: ns_to_us(precise_time_ns()),
             event_type: SampleEventType::Instant,
             duration_us: None,
             tid: sys_tid::current_tid().unwrap(),
@@ -366,7 +367,7 @@ impl<'a> Drop for SampleGuard<'a> {
     fn drop(&mut self) {
         if let Some(ref mut trace) = self.trace {
             let mut sample = self.sample.take().unwrap();
-            sample.timestamp_us = ns_to_us(time::precise_time_ns());
+            sample.timestamp_us = ns_to_us(precise_time_ns());
             sample.event_type = SampleEventType::DurationEnd;
             trace.record(sample);
         }
