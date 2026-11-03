@@ -1,6 +1,6 @@
 [package]
 name = "xi-trace"
-version = "0.3.1"
+version = "0.3.2"
 license = "Apache-2.0"
 authors = ["Vitali Lovich <vlovich@google.com>", "LOC-OSS Community"]
 categories = ["development-tools::profiling"]
